@@ -205,16 +205,20 @@ class AccountController extends Controller
     //only opened ones
     public function showAllOpened(){
         $accounts = Account::with(['member'])->get();
+        $balances = $accounts->sum('balance');
         return response()->json([
             'accounts' => $accounts,
+            'amounts' => $balances,
             'success' => true
         ]);
     }
     //all open and close
     public function showAll(){
         $accounts = Account::withoutGlobalScope('is_open')->with(['member'])->get();
+        $balances = $accounts->sum('balance');
         return response()->json([
             'accounts' => $accounts,
+            'amounts' => $balances,
             'success' => true
         ]);
     }
@@ -250,8 +254,10 @@ class AccountController extends Controller
             $query->orWhere('status', $status);
         }
             $accounts = $query->with(['member'])->get();
+            $balances = $query->sum('balance');
             return response()->json([
                 'accounts' => $accounts,
+                'amounts' => $balances,
                 'success' => true
             ]);
 
