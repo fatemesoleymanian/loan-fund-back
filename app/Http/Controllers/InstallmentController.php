@@ -170,29 +170,67 @@ class InstallmentController extends Controller
         ]);
     }
 
+//    public function pay(InstallmentPaymentRequest $request){
+//        DB::beginTransaction();
+//        try {
+//            $account = Account::with('member')->where('id',$request->account_id)->first();
+//            $installment = Installment::where('id',$request->id)->first();
+//            $fund_account = FundAccount::where('id',$request->fund_account_id)->first();
+//
+//            if ((int)$request->type == 1) $this->payCharge($request,$account,$installment,$fund_account);
+//            else if ((int)$request->type == 2) $this->payLoanInstallment($request,$installment,$fund_account);
+//            else return TransactionController::errorResponse('نوع قسط صحیح نیست!',400);
+//
+//            $transaction = $this->logging($request);
+//
+//            DB::commit();
+//            $account->status = $this->checkForAccountStatus($account->id);
+//            $account->save();
+//            DB::commit();
+//
+//            $sms = null;
+//
+//            if($account->have_sms) {
+//                if ((int)$request->type == 1) $sms = $this->sendSms($request->amount, $account->member_name, $account->balance, $account->member->mobile_number, 'charge');
+//                else if ((int)$request->type == 2) $sms = $this->sendSms($installment->inst_number, $account->member_name, $request->amount, $account->member->mobile_number, 'installment');
+//            }
+//
+//            return response()->json([
+//                'msg' => $sms != null ?'پرداخت انجام شد. پیامک ارسال شد.':'پرداخت انجام شد!',
+//                'success' => true,
+//                'sms' => $sms
+//            ]);
+//        }catch (\Exception $exception){
+//            DB::rollBack();
+//            return TransactionController::errorResponse('خطایی در پرداخت قسط رخ داد!',$exception->getMessage());
+//        }
+//
+//    }
     public function pay(InstallmentPaymentRequest $request){
+        $sms = null;
         DB::beginTransaction();
         try {
             $account = Account::with('member')->where('id',$request->account_id)->first();
             $installment = Installment::where('id',$request->id)->first();
             $fund_account = FundAccount::where('id',$request->fund_account_id)->first();
 
-            if ((int)$request->type == 1) $this->payCharge($request,$account,$installment,$fund_account);
-            else if ((int)$request->type == 2) $this->payLoanInstallment($request,$installment,$fund_account);
-            else return TransactionController::errorResponse('نوع قسط صحیح نیست!',400);
+            if($installment->paid_date != null){
+                if ((int)$request->type == 1) $this->payCharge($request,$account,$installment,$fund_account);
+                else if ((int)$request->type == 2) $this->payLoanInstallment($request,$installment,$fund_account);
+                else return TransactionController::errorResponse('نوع قسط صحیح نیست!',400);
 
-            $transaction = $this->logging($request);
+                $transaction = $this->logging($request);
 
-            DB::commit();
-            $account->status = $this->checkForAccountStatus($account->id);
-            $account->save();
-            DB::commit();
+                DB::commit();
+                $account->status = $this->checkForAccountStatus($account->id);
+                $account->save();
+                DB::commit();
 
-            $sms = null;
 
-            if($account->have_sms) {
-                if ((int)$request->type == 1) $sms = $this->sendSms($request->amount, $account->member_name, $account->balance, $account->member->mobile_number, 'charge');
-                else if ((int)$request->type == 2) $sms = $this->sendSms($installment->inst_number, $account->member_name, $request->amount, $account->member->mobile_number, 'installment');
+                if($account->have_sms) {
+                    if ((int)$request->type == 1) $sms = $this->sendSms($request->amount, $account->member_name, $account->balance, $account->member->mobile_number, 'charge');
+                    else if ((int)$request->type == 2) $sms = $this->sendSms($installment->inst_number, $account->member_name, $request->amount, $account->member->mobile_number, 'installment');
+                }
             }
 
             return response()->json([
