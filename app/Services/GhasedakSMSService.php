@@ -24,6 +24,7 @@ class GhasedakSMSService
             CURLOPT_HTTPHEADER => array(
                 "apikey: ".$this->apiKey,
             ),
+            CURLOPT_PROXY          => '',
         ));
         $response = curl_exec($curl);
         $err = curl_error($curl);
@@ -46,6 +47,7 @@ class GhasedakSMSService
             CURLOPT_HTTPHEADER => array(
                 "apikey: ".$this->apiKey,
             ),
+            CURLOPT_PROXY          => '',
         ));
         $response = curl_exec($curl);
         $err = curl_error($curl);
@@ -84,7 +86,9 @@ class GhasedakSMSService
                     "apikey: $this->apiKey",
 //                    "cache-control: no-cache",
                     "content-type: application/x-www-form-urlencoded",
-                )));
+                ),
+                CURLOPT_PROXY          => '',
+            ));
             $response = curl_exec($curl);
             $err = curl_error($curl);
             curl_close($curl);

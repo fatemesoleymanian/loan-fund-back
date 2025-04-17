@@ -32,7 +32,7 @@ class DatabaseBackup extends Controller
 
         // Download and delete temp file
         return response()
-            ->download($backupPath, 'بکاپ_صندوق.sqlite')
+            ->download($backupPath, 'بکاپ_صندوق.sqlite',['Content-Type' => 'application/octet-stream'])
             ->deleteFileAfterSend(true);
     }
 }
