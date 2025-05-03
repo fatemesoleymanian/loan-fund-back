@@ -115,6 +115,7 @@ Route::prefix('/installment')->group(function (){
     Route::get('/fee_report',[InstallmentController::class,'showFees']);
     Route::get('/count/{account_id}',[InstallmentController::class,'numberOfUnpaidInstallmentsOfAccount']);
     Route::post('/pay',[InstallmentController::class,'pay']);
+    Route::post('/edit_installment',[InstallmentController::class,'editInstallment']);
     Route::get('/latency_sms{type}',[InstallmentController::class,'sendLatencySms']);
     Route::get('/reminder_sms',[InstallmentController::class,'sendReminderSms']);
 });

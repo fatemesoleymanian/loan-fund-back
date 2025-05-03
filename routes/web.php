@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\DatabaseBackup;
+use App\Models\LoanAccount;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -18,3 +19,7 @@ Route::get('/database/download',[DatabaseBackup::class,'download']);
 Route::get('/', function () {
     return view('welcome');
 });
+//Route::get('/del_trans', function (){
+//running query
+//});
+

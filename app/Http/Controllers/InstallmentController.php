@@ -8,6 +8,7 @@ use App\Models\Account;
 use App\Models\FundAccount;
 use App\Models\Installment;
 use App\Models\LoanAccount;
+use App\Models\MonthlyCharge;
 use App\Models\Transaction;
 use Hekmatinasser\Verta\Verta;
 use Illuminate\Http\Request;
@@ -206,6 +207,118 @@ class InstallmentController extends Controller
 //        }
 //
 //    }
+    public function editInstallment(InstallmentPaymentRequest $request){
+        //$request->amount should be less than installment acutal amount
+        $sms = null;
+        DB::beginTransaction();
+        try {
+            $account = Account::with('member')->where('id',$request->account_id)->first();
+            $installment = Installment::where('id',$request->id)->first();
+            $fund_account = FundAccount::where('id',$request->fund_account_id)->first();
+
+            $msg = '';
+            if($installment->paid_date == null){
+                if ((int)$request->type == 1) $this->payChargeAndEdit($request,$account,$installment,$fund_account);
+                else if ((int)$request->type == 2) $this->payLoanInstallmentAndEdit($request,$installment,$fund_account);
+                else return TransactionController::errorResponse('نوع قسط صحیح نیست!',400);
+
+                $transaction = $this->logging($request);
+
+                DB::commit();
+                $account->status = $this->checkForAccountStatus($account->id);
+                $account->save();
+                DB::commit();
+
+
+                if($account->have_sms) {
+                    if ((int)$request->type == 1) $sms = $this->sendSms($request->amount, $account->member_name, $account->balance, $account->member->mobile_number, 'charge');
+                    else if ((int)$request->type == 2) $sms = $this->sendSms($installment->inst_number, $account->member_name, $request->amount, $account->member->mobile_number, 'installment');
+                    $msg = 'پرداخت انجام شد. پیامک ارسال شد.';
+                } else $msg = 'پرداخت انجام شد!';
+            }
+            else $msg = 'قسط قبلا پرداخت شده!';
+
+
+            return response()->json([
+                'msg' => $msg,
+                'success' => true,
+                'sms' => $sms
+            ]);
+        }catch (\Exception $exception){
+            DB::rollBack();
+//            return TransactionController::errorResponse('خطایی در پرداخت قسط رخ داد!',$exception->getMessage());
+            return TransactionController::errorResponse($exception->getMessage());
+        }
+
+    }
+    private function payChargeAndEdit($request,$account,$installment,$fund_account){
+        if ($request->amount < $installment->amount) {
+            $fund_account->balance += $request->amount;
+            $fund_account->total_balance += $request->amount;
+            $fund_account->save();
+
+            $account->balance += $request->amount;
+            $account->save();
+
+            $monthly_charge = MonthlyCharge::where('id',$installment->monthly_charge_id)->first();
+            $insts = Installment::where('monthly_charge_id',$installment->monthly_charge_id)
+                ->where('account_id',$account->id)->count();
+            $remaining_amount_for_second_inst = $installment->amount - $request->amount;
+
+            Installment::create([
+                'monthly_charge_id' => $installment->monthly_charge_id,
+                'year' => $installment->year,
+                'account_id' => $installment->account_id,
+                'account_name' => $installment->account_name,
+                'inst_number' => $insts+1,
+                'amount' => (int)$remaining_amount_for_second_inst,
+                'due_date' => Verta::parse($request->new_due_date)->format('Y/m/d'),
+                'paid_date' => null,
+                'delay_days' => 0,
+                'type' => 1,
+                'title' => $monthly_charge->title
+            ]);
+            $installment->paid_date = Verta::now();
+            $installment->amount = $request->amount;
+            $installment->save();
+        }else return TransactionController::errorResponse('مبلغ قسط صحیح نیست!',400);
+    }
+    private function payLoanInstallmentAndEdit($request,$installment,$fund_account){
+        if ($request->amount < $installment->amount) {
+            $fund_account->balance += $request->amount;
+            $fund_account->total_balance += $request->amount;
+            $fund_account->save();
+
+            $loan = LoanAccount::where('id',$installment->loan_account_id)->first();
+            $loan->paid_amount += $request->amount;
+            $loan->no_of_paid_inst += 1;
+            $loan->number_of_installments += 1;
+            $loan->save();
+
+
+            $insts = Installment::where('loan_account_id',$installment->loan_account_id)
+                ->where('account_id',$installment->account_id)->count();
+            $remaining_amount_for_second_inst = $installment->amount - $request->amount;
+
+            Installment::create([
+                'loan_id' => $installment->loan_id,
+                'loan_account_id' => $installment->loan_account_id,
+                'account_id' => $installment->account_id,
+                'account_name' => $installment->account_name,
+                'inst_number' => $insts+1,
+                'amount' => (int)$remaining_amount_for_second_inst,
+                'due_date' => Verta::parse($request->new_due_date)->format('Y/m/d'),
+                'paid_date' => null,
+                'delay_days' => 0,
+                'type' => 2,
+                'title' => $request->title,
+            ]);
+
+            $installment->paid_date = Verta::now();
+            $installment->amount = $request->amount;
+            $installment->save();
+        }else return TransactionController::errorResponse('مبلغ قسط صحیح نیست!',400);
+    }
     public function pay(InstallmentPaymentRequest $request){
         $sms = null;
         DB::beginTransaction();
@@ -214,7 +327,8 @@ class InstallmentController extends Controller
             $installment = Installment::where('id',$request->id)->first();
             $fund_account = FundAccount::where('id',$request->fund_account_id)->first();
 
-            if($installment->paid_date != null){
+            $msg = '';
+            if($installment->paid_date == null){
                 if ((int)$request->type == 1) $this->payCharge($request,$account,$installment,$fund_account);
                 else if ((int)$request->type == 2) $this->payLoanInstallment($request,$installment,$fund_account);
                 else return TransactionController::errorResponse('نوع قسط صحیح نیست!',400);
@@ -230,11 +344,14 @@ class InstallmentController extends Controller
                 if($account->have_sms) {
                     if ((int)$request->type == 1) $sms = $this->sendSms($request->amount, $account->member_name, $account->balance, $account->member->mobile_number, 'charge');
                     else if ((int)$request->type == 2) $sms = $this->sendSms($installment->inst_number, $account->member_name, $request->amount, $account->member->mobile_number, 'installment');
-                }
+                    $msg = 'پرداخت انجام شد. پیامک ارسال شد.';
+                } else $msg = 'پرداخت انجام شد!';
             }
+            else $msg = 'قسط قبلا پرداخت شده!';
+
 
             return response()->json([
-                'msg' => $sms != null ?'پرداخت انجام شد. پیامک ارسال شد.':'پرداخت انجام شد!',
+                'msg' => $msg,
                 'success' => true,
                 'sms' => $sms
             ]);
